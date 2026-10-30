@@ -182,3 +182,33 @@ app.post('/save-time', express.text({type: '*/*'}), (req, res) => {
   fs.writeFileSync(fileTime, req.body);
   res.send('<h3>✅ 保存成功！<a href="/edit-time">返回编辑页</a></h3>');
 })
+
+// ========== 插件读写 1.txt 的API，支持跨域 ==========
+const fs = require('fs');
+const path = require('path');
+const file1 = path.join(__dirname, '1.txt');
+
+// 允许跨域（插件必备！）
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Content-Type");
+  if (req.method === 'OPTIONS') return res.sendStatus(200);
+  next();
+});
+
+// 读取 1.txt
+app.get('/api/read1', (req, res) => {
+  if (!fs.existsSync(file1)) {
+    return res.json({ ok: true, content: "" });
+  }
+  const txt = fs.readFileSync(file1, 'utf-8');
+  res.json({ ok: true, content: txt });
+});
+
+// 写入 1.txt（覆盖式写入）
+app.post('/api/write1', express.json(), (req, res) => {
+  const { content } = req.body;
+  fs.writeFileSync(file1, content, 'utf-8');
+  res.json({ ok: true, msg: "写入成功" });
+});
