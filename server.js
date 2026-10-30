@@ -111,11 +111,11 @@ app.get('/fmt/:ms', (req, res) => {
   res.send(arr.join(' '));
 });
 
-// 删除卡密
+// 删除卡密（这里已经修复双点问题）
 app.post('/api/delete-code', (req, res) => {
   const { code } = req.body;
   if (!code) return res.json({ ok: false, msg: "缺少code" });
-  let all = readAll()..filter(it => it.code !== code);
+  let all = readAll().filter(it => it.code !== code);
   all = all.map((it, idx) => ({ ...it, id: idx + 1 }));
   saveAll(all);
   const tm = readTimeMap();
@@ -124,7 +124,7 @@ app.post('/api/delete-code', (req, res) => {
   return res.json({ ok: true });
 });
 
-// ✅ 新增激活接口 /activate
+// 激活接口 /activate
 app.post('/activate', (req, res) => {
   const { code } = req.body;
   if (!code) return res.json({ ok: false, msg: "缺少code" });
@@ -146,6 +146,5 @@ app.get('/', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  // 这条日志大概率免费版render看不到，不用管
   console.log("✅服务启动成功 port:", PORT);
 });
