@@ -1,20 +1,20 @@
 const express = require('express');
-const axios = require('axios');
+const fs = require('fs');
 const path = require('path');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
+const DATA_FILE = path.join(__dirname, 'data.json');
+const TIME_FILE = path.join(__dirname, 'time.json');
 
-const PANTRY_ID = process.env.PANTRY_ID;
-console.log("读取到的 PANTRY_ID：", PANTRY_ID);
-if (!PANTRY_ID) {
-  console.error("❌ 错误：没有读取到 PANTRY_ID 环境变量！");
+function initFile(filePath, defaultValue) {
+  if (!fs.existsSync(filePath)) {
+    fs.writeFileSync(filePath, JSON.stringify(defaultValue));
+  }
 }
-const API_BASE = `https://getpantry.cloud/apiv1/pantry/${PANTRY_ID}/basket`;
-const BASKET_DATA = "data1";
-const BASKET_TIME = "timeData";
+initFile(DATA_FILE, []);
+initFile(TIME_FILE, {});
 
-// 缓存：2分钟
 const CACHE_TTL = 120 * 1000;
 let cache = {
   data: { value: null, time: 0 },
@@ -32,74 +32,50 @@ app.use((req, res, next) => {
 app.use(express.json());
 app.use(express.static(path.join(__dirname, './')));
 
-async function pantryGet(basketName) {
-  try {
-    console.log(`👉 发起读取请求: ${API_BASE}/${basketName}`);
-    const r = await axios.get(`${API_BASE}/${basketName}`, { timeout: 12000 });
-    console.log(`✅ 读取成功 ${basketName}`, r.data);
-    return r.data;
-  } catch (e) {
-    console.error(`❌ 读取失败 ${basketName}`, e.message);
-    return null;
-  }
-}
-async function pantryPut(basketName, payload) {
-  try {
-    console.log(`👉 发起保存请求: ${API_BASE}/${basketName}`, payload);
-    await axios.post(`${API_BASE}/${basketName}`, payload, { timeout: 12000 });
-    console.log(`✅ 保存成功 ${basketName}`);
-    if (basketName === BASKET_DATA) {
-      cache.data.value = payload;
-      cache.data.time = Date.now();
-    }
-    if (basketName === BASKET_TIME) {
-      cache.time.value = payload;
-      cache.time.time = Date.now();
-    }
-    return true;
-  } catch (e) {
-    console.error(`❌ 保存失败 ${basketName}`, e.message);
-    return false;
-  }
-}
-
 app.get('/api/getData', async (req, res) => {
   const now = Date.now();
   if (cache.data.value && now - cache.data.time < CACHE_TTL) {
-    console.log("✅ 使用缓存 getData");
     return res.json(cache.data.value);
   }
-  const data = await pantryGet(BASKET_DATA);
-  if (data) {
-    cache.data.value = data;
-    cache.data.time = now;
-  }
-  res.json(data || []);
+  const raw = fs.readFileSync(DATA_FILE, 'utf8');
+  const data = JSON.parse(raw);
+  cache.data.value = data;
+  cache.data.time = now;
+  res.json(data);
 });
 
 app.get('/api/getTime', async (req, res) => {
   const now = Date.now();
   if (cache.time.value && now - cache.time.time < CACHE_TTL) {
-    console.log("✅ 使用缓存 getTime");
     return res.json(cache.time.value);
   }
-  const data = await pantryGet(BASKET_TIME);
-  if (data) {
-    cache.time.value = data;
-    cache.time.time = now;
-  }
-  res.json(data || {});
+  const raw = fs.readFileSync(TIME_FILE, 'utf8');
+  const data = JSON.parse(raw);
+  cache.time.value = data;
+  cache.time.time = now;
+  res.json(data);
 });
 
 app.post('/api/saveData', async (req, res) => {
-  console.log("收到 saveData 请求 body：", req.body);
-  const ok = await pantryPut(BASKET_DATA, req.body);
-  res.json({ success: ok });
+  const payload = req.body;
+  if (!Array.isArray(payload) || payload.length === 0) {
+    return res.json({ success: false, msg: "禁止保存空卡密列表！" });
+  }
+  fs.writeFileSync(DATA_FILE, JSON.stringify(payload));
+  cache.data.value = payload;
+  cache.data.time = Date.now();
+  res.json({ success: true });
 });
+
 app.post('/api/saveTime', async (req, res) => {
-  console.log("收到 saveTime 请求 body：", req.body);
-  const ok = await pantryPut(BASKET_TIME, req.body);
-  res.json({ success: ok });
+  const payload = req.body;
+  if (typeof payload !== "object" || payload === null) {
+    return res.json({ success: false, msg: "时间数据格式错误" });
+  }
+  fs.writeFileSync(TIME_FILE, JSON.stringify(payload));
+  cache.time.value = payload;
+  cache.time.time = Date.now();
+  res.json({ success: true });
 });
 
 app.get('/', (req, res) => {
