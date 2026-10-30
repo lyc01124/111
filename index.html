@@ -2,53 +2,58 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<title>时效随机码管理</title>
+<title>卡密管理系统</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;font-family:system-ui}
 body{padding:20px;background:#111;color:#eee}
 .box{margin-bottom:20px;padding:16px;border:1px solid #444;border-radius:8px}
-input,button{padding:8px 12px;font-size:16px}
-button{cursor:pointer;background:#2563eb;color:#fff;border:none;border-radius:4px;margin-left:8px}
-button.del{background:#dc2626;}
-button.act{background:#16a34a;}
+input,button{padding:8px 12px;font-size:15px}
+button{cursor:pointer;border:none;border-radius:4px;margin-left:6px}
+button.gen{background:#2563eb;color:#fff}
+button.act{background:#16a34a;color:#fff}
+button.del{background:#dc2626;color:#fff}
+button.addtime{background:#9333ea;color:#fff}
 #tip{margin:10px 0;color:#f88}
 table{border-collapse:collapse;width:100%;margin-top:10px}
-th,td{border:1px solid #444;padding:10px;text-align:center}
+th,td{border:1px solid #444;padding:9px;text-align:center}
 th{background:#222}
-.check-col{width:40px;}
-.tool-bar{margin-bottom:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
-#searchInput{margin-left:auto;}
-.hidden-row{display:none;}
+.check-col{width:40px}
+.tool-bar{margin-bottom:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+#searchInput{margin-left:auto}
+.top-match{background:#223344;}
 </style>
 </head>
 <body>
 <div class="box">
-    <h3>生成随机码</h3>
-    <p>时间前缀（格式：1F / 3S / 2H / 1T / 1Y，不能输入10H这类）</p>
+    <h3>生成卡密</h3>
+    <p>时长格式：1F=1分钟｜1S/1H=1小时｜1T=1天｜1Y=1月</p>
     <input type="text" id="prefix" placeholder="例如：1F">
-    <button onclick="genCode()">生成</button>
-    <button onclick="refreshList()">手动刷新列表</button>
+    <button class="gen" onclick="genCode()">生成</button>
     <div id="tip"></div>
     <div id="newCodeBox" style="margin-top:10px;display:none">
-        生成码：<span id="newCode"></span>
+        卡密：<span id="newCode"></span>
         <button onclick="copyCode()">复制</button>
     </div>
 </div>
+
 <div class="box">
     <div class="tool-bar">
         <button onclick="selectAll()">全选</button>
         <button onclick="unSelectAll()">取消全选</button>
-        <button class="del" onclick="batchDelete()">删除选中项</button>
-        <input id="searchInput" type="text" placeholder="搜索卡密/编号" oninput="filterTable()">
+        <button class="del" onclick="batchDelete()">批量删除</button>
+        <input id="addTimeInput" type="text" placeholder="加时时长 如1F">
+        <button class="addtime" onclick="selectedAddTime()">选中加时</button>
+        <button class="addtime" onclick="allAddTime()">一键全部加时</button>
+        <input id="searchInput" type="text" placeholder="搜索编号/卡密，匹配置顶" oninput="filterTable()">
     </div>
-    <h3>随机码列表</h3>
+    <h3>卡密列表</h3>
     <table>
         <thead>
             <tr>
                 <th class="check-col"><input type="checkbox" id="checkAll"></th>
                 <th>编号</th>
-                <th>随机码</th>
-                <th>是否激活</th>
+                <th>卡密</th>
+                <th>激活状态</th>
                 <th>激活时间</th>
                 <th>剩余时间</th>
                 <th>操作</th>
@@ -57,6 +62,7 @@ th{background:#222}
         <tbody id="tableBody"></tbody>
     </table>
 </div>
+
 <script>
 let lastCode = '';
 let tableData = [];
@@ -66,7 +72,7 @@ async function genCode(){
     const pre = document.getElementById('prefix').value.trim();
     tipEl.innerText = '';
     if(!pre){
-        tipEl.innerText = '⚠️ 请输入时间前缀';
+        tipEl.innerText = '⚠️请输入时长';
         return;
     }
     try{
@@ -74,46 +80,69 @@ async function genCode(){
             method:'POST',
             headers:{'Content-Type':'application/json'},
             body:JSON.stringify({prefix:pre})
-        });
+        })
         const json = await res.json();
         if(!json.ok){
             tipEl.innerText = json.msg;
             return;
         }
-        tipEl.innerText = '✅ 生成成功';
+        tipEl.innerText = '✅生成成功';
         lastCode = json.code;
         document.getElementById('newCode').innerText = lastCode;
         document.getElementById('newCodeBox').style.display = 'block';
         refreshList();
-    }catch(err){
-        tipEl.innerText = '❌ 请求异常，后端连接失败';
-        console.error(err);
+    }catch(e){
+        tipEl.innerText = '❌请求失败';
+        console.error(e);
     }
 }
-
 function copyCode(){
-    if(!lastCode){
-        alert("暂无卡密");
-        return;
-    }
+    if(!lastCode){alert("暂无卡密");return;}
     navigator.clipboard.writeText(lastCode);
     alert('已复制');
 }
 
 async function activateCode(code){
-    if(!confirm("确定激活该卡密？激活后计时开始")) return;
-    const resp = await fetch("/activate",{
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
+    if(!confirm("确定激活？激活后开始倒计时")) return;
+    const res = await fetch('/activate',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
         body:JSON.stringify({code})
     })
-    const ret = await resp.json();
+    const ret = await res.json();
     if(ret.ok){
         alert("激活成功");
         refreshList();
     }else{
-        alert("失败：" + ret.msg);
+        alert(ret.msg);
     }
+}
+
+async function selectedAddTime(){
+    const dur = document.getElementById('addTimeInput').value.trim();
+    if(!dur){alert("填写加时时长");return;}
+    const checks = Array.from(document.querySelectorAll('.item-check:checked'));
+    if(checks.length ===0){alert("请先勾选卡密");return;}
+    const codeList = checks.map(cb=>cb.dataset.code);
+    const res = await fetch('/addTime',{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({codeList, prefix:dur})
+    })
+    const ret = await res.json();
+    if(ret.ok){alert("加时成功");refreshList();}else alert(ret.msg);
+}
+async function allAddTime(){
+    const dur = document.getElementById('addTimeInput').value.trim();
+    if(!dur){alert("填写加时时长");return;}
+    const codeList = tableData.map(it=>it.code);
+    const res = await fetch('/addTime',{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({codeList, prefix:dur})
+    })
+    const ret = await res.json();
+    if(ret.ok){alert("全部加时成功");refreshList();}else alert(ret.msg);
 }
 
 async function refreshList(){
@@ -121,87 +150,84 @@ async function refreshList(){
         const res = await fetch('/list');
         const json = await res.json();
         tableData = json.data;
-        const tbody = document.getElementById('tableBody');
-        tbody.innerHTML = '';
-        for(const row of tableData){
-            const remainMs = row.expireAt - Date.now();
-            const remainRes = await fetch(`/fmt/${remainMs}`);
-            const remainText = await remainRes.text();
-            const tr = document.createElement('tr');
-            tr.dataset.id = row.id;
-            tr.dataset.code = row.code;
-            const activeText = row.active === '1' ? '是' : '否';
-            const activateTime = row.activateAt ? new Date(row.activateAt).toLocaleString() : '-';
-            const actBtn = row.active === '0' ? `<button class="act" onclick="activateCode('${row.code}')">激活</button>` : `<span style="color:#888">已激活</span>`;
-            tr.innerHTML = `
-                <td class="check-col"><input class="item-check" type="checkbox" data-id="${row.id}" data-code="${row.code}"></td>
-                <td>${row.id}</td>
-                <td>${row.code}</td>
-                <td>${activeText}</td>
-                <td>${activateTime}</td>
-                <td>${remainText}</td>
-                <td>${actBtn}</td>
-            `;
-            tbody.appendChild(tr);
-        }
-        filterTable();
+        renderTable(tableData);
     }catch(e){
-        tipEl.innerText = "列表加载失败";
-        console.error(e);
+        tipEl.innerText = '列表加载失败';
+    }
+}
+
+async function renderTable(rawList){
+    const keyword = document.getElementById('searchInput').value.trim().toLowerCase();
+    let match = [];
+    let other = [];
+    for(const item of rawList){
+        const s = String(item.id).toLowerCase() + item.code.toLowerCase();
+        if(keyword && s.includes(keyword)){
+            match.push(item);
+        }else{
+            other.push(item);
+        }
+    }
+    const finalList = [...match, ...other];
+    const tbody = document.getElementById('tableBody');
+    tbody.innerHTML = '';
+    for(const row of finalList){
+        let remainText = "-";
+        if(row.remainMs !== null){
+            const r = await fetch(`/fmt/${row.remainMs}`);
+            remainText = await r.text();
+        }
+        const activeText = row.active === "1" ? "是" : "否";
+        const actTime = row.activateAt ? new Date(row.activateAt).toLocaleString() : "-";
+        const actBtn = row.active === "0"
+            ? `<button class="act" onclick="activateCode('${row.code}')">激活</button>`
+            : `<span style="color:#888">已激活</span>`;
+        const tr = document.createElement('tr');
+        tr.dataset.code = row.code;
+        tr.dataset.id = row.id;
+        if(keyword && (String(row.id).toLowerCase()+row.code.toLowerCase()).includes(keyword)){
+            tr.classList.add("top-match");
+        }
+        tr.innerHTML = `
+            <td class="check-col"><input class="item-check" type="checkbox" data-code="${row.code}" data-id="${row.id}"></td>
+            <td>${row.id}</td>
+            <td>${row.code}</td>
+            <td>${activeText}</td>
+            <td>${actTime}</td>
+            <td>${remainText}</td>
+            <td>${actBtn}</td>
+        `
+        tbody.appendChild(tr);
     }
 }
 
 function filterTable(){
-    const keyword = document.getElementById("searchInput").value.trim().toLowerCase();
-    const rows = document.querySelectorAll("#tableBody tr");
-    rows.forEach(tr=>{
-        const id = tr.dataset.id.toLowerCase();
-        const code = tr.dataset.code.toLowerCase();
-        if(keyword === "" || id.includes(keyword) || code.includes(keyword)){
-            tr.classList.remove("hidden-row");
-        }else{
-            tr.classList.add("hidden-row");
-        }
-    })
+    renderTable(tableData);
 }
 
 function selectAll(){
-    document.querySelectorAll('.item-check:not(.hidden-row input)').forEach(cb=>cb.checked=true);
+    document.querySelectorAll('.item-check').forEach(cb=>cb.checked=true);
 }
 function unSelectAll(){
     document.querySelectorAll('.item-check').forEach(cb=>cb.checked=false);
 }
-
 async function batchDelete(){
     const checks = Array.from(document.querySelectorAll('.item-check:checked'));
-    if(checks.length===0){
-        alert("请先勾选要删除的条目");
-        return;
+    if(checks.length ===0){alert("勾选要删除的卡密");return;}
+    if(!confirm(`确定删除 ${checks.length} 条？`)) return;
+    for(const cb of checks){
+        const code = cb.dataset.code;
+        await fetch('/api/delete-code',{
+            method:"POST",
+            headers:{"Content-Type":"application/json"},
+            body:JSON.stringify({code})
+        })
     }
-    const codeList = checks.map(cb=>cb.dataset.code);
-    if(!confirm(`确定删除选中 ${codeList.length} 条记录？`)){
-        return;
-    }
-    for(const code of codeList){
-        try{
-            const resp = await fetch("/api/delete-code",{
-                method:"POST",
-                headers:{"Content-Type":"application/json"},
-                body:JSON.stringify({code:code})
-            })
-            const ret = await resp.json();
-            if(!ret.ok){
-                console.warn(`删除失败 ${code}：`,ret.msg);
-            }
-        }catch(e){
-            console.error("删除请求异常",code,e);
-        }
-    }
-    alert("批量删除执行完毕，即将刷新列表");
+    alert("删除完成");
     refreshList();
 }
 
-setInterval(refreshList, 60000);
+setInterval(refreshList,60000);
 refreshList();
 </script>
 </body>
