@@ -217,6 +217,46 @@ app.post('/raw/1.txt', (req, res) => {
   });
 });
 
+/**
+ * 接口：POST /api/activate-code
+ * 请求体 { "code":"1Fxxxx随机码" }
+ * 功能：收到随机码，激活该条记录，写入time.txt
+ */
+app.post('/api/activate-code', express.json(), (req, res) => {
+  const { code } = req.body;
+  if (!code) {
+    return res.json({ ok: false, msg: "缺少随机码code参数" });
+  }
+
+  let list1 = readFile1();
+  // 查找这条随机码记录
+  const targetItem = list1.find(item => item.code === code);
+  if (!targetItem) {
+    return res.json({ ok: false, msg: "找不到该随机码记录" });
+  }
+
+  // 如果已经激活，直接返回
+  if (targetItem.active === "1") {
+    return res.json({ ok: true, msg: "该码已经激活", id: targetItem.id });
+  }
+
+  // 修改active为1，设置激活时间为当前时间戳
+  targetItem.active = "1";
+  targetItem.activateAt = Date.now();
+  saveFile1(list1);
+
+  // 追加写入 time.txt：格式 code;id
+  const appendLine = `${targetItem.code};${targetItem.id}\n`;
+  fs.appendFileSync(fileTime, appendLine, "utf-8");
+
+  return res.json({
+    ok: true,
+    msg: "已成功激活",
+    id: targetItem.id,
+    code: targetItem.code
+  });
+});
+
 app.listen(port, ()=>{
     console.log(`服务启动，端口：${port}`);
 })
