@@ -1,4 +1,10 @@
-// 跨域，给插件放行
+const express = require('express');
+const fs = require('fs');
+const path = require('path');
+const app = express();
+const port = process.env.PORT || 3000;
+
+// ===== 跨域中间件（必须放在这里！app创建之后，所有路由之前）=====
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
   res.header("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
@@ -7,14 +13,9 @@ app.use((req, res, next) => {
   next();
 });
 
-const express = require('express');
-const fs = require('fs');
-const path = require('path');
-const app = express();
-const port = process.env.PORT || 3000;
-
 app.use(express.static(__dirname));
 app.use(express.json());
+app.use(express.text({type: '*/*'})); // 给edit-time的文本解析
 
 const file1 = path.join(__dirname, '1.txt');
 const fileTime = path.join(__dirname, 'time.txt');
@@ -42,19 +43,17 @@ function saveFile1(list) {
     const str = list.map(i => `${i.id};${i.code};${i.active}`).join('\n');
     fs.writeFileSync(file1, str);
 }
-
 function readTimeFile() {
     if (!fs.existsSync(fileTime)) fs.writeFileSync(fileTime, '');
     const txt = fs.readFileSync(fileTime, 'utf-8');
     const lines = txt.trim().split('\n').filter(Boolean);
     const map = new Map();
     lines.forEach(line => {
-        const [id, code] = line.split(';');
+        const [code, id] = line.split(';'); // 这里注意！原来你写反了 code;id
         map.set(code, id);
     });
     return map;
 }
-
 function randomStr(len) {
     const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
     let res = '';
@@ -63,7 +62,6 @@ function randomStr(len) {
     }
     return res;
 }
-
 function getMaxId(list){
     let max = 0;
     list.forEach(i=>{
@@ -157,15 +155,8 @@ app.get('/fmt/:ms', (req,res)=>{
     res.send(formatMs(ms));
 })
 
-app.listen(port, ()=>{
-    console.log(`服务启动，端口：${port}`);
-})
-
-// 在线编辑 time.txt
+// ========== 在线编辑 time.txt ==========
 app.get('/edit-time', (req, res) => {
-  const fs = require('fs');
-  const path = require('path');
-  const fileTime = path.join(__dirname, 'time.txt');
   let content = '';
   if (fs.existsSync(fileTime)) {
     content = fs.readFileSync(fileTime, 'utf-8');
@@ -184,28 +175,12 @@ app.get('/edit-time', (req, res) => {
   </html>
   `)
 })
-app.post('/save-time', express.text({type: '*/*'}), (req, res) => {
-  const fs = require('fs');
-  const path = require('path');
-  const fileTime = path.join(__dirname, 'time.txt');
+app.post('/save-time', (req, res) => {
   fs.writeFileSync(fileTime, req.body);
   res.send('<h3>✅ 保存成功！<a href="/edit-time">返回编辑页</a></h3>');
 })
 
-// ========== 插件读写 1.txt 的API，支持跨域 ==========
-const fs = require('fs');
-const path = require('path');
-const file1 = path.join(__dirname, '1.txt');
-
-// 允许跨域（插件必备！）
-app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", "*");
-  res.header("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-  res.header("Access-Control-Allow-Headers", "Content-Type");
-  if (req.method === 'OPTIONS') return res.sendStatus(200);
-  next();
-});
-
+// ========== 插件API：json版本 ==========
 // 读取 1.txt
 app.get('/api/read1', (req, res) => {
   if (!fs.existsSync(file1)) {
@@ -214,10 +189,34 @@ app.get('/api/read1', (req, res) => {
   const txt = fs.readFileSync(file1, 'utf-8');
   res.json({ ok: true, content: txt });
 });
-
 // 写入 1.txt（覆盖式写入）
-app.post('/api/write1', express.json(), (req, res) => {
+app.post('/api/write1', (req, res) => {
   const { content } = req.body;
   fs.writeFileSync(file1, content, 'utf-8');
   res.json({ ok: true, msg: "写入成功" });
 });
+
+// ========== 插件API：raw纯文本版本（推荐插件用） ==========
+app.get('/raw/1.txt', (req, res) => {
+  res.setHeader("Content-Type", "text/plain;charset=utf-8");
+  if (!fs.existsSync(file1)) return res.send("");
+  res.send(fs.readFileSync(file1, 'utf-8'));
+})
+app.get('/raw/time.txt', (req, res) => {
+  res.setHeader("Content-Type", "text/plain;charset=utf-8");
+  if (!fs.existsSync(fileTime)) return res.send("");
+  res.send(fs.readFileSync(fileTime, 'utf-8'));
+})
+// raw写入1.txt
+app.post('/raw/1.txt', (req, res) => {
+  let body = '';
+  req.on('data', chunk => body += chunk);
+  req.on('end', () => {
+    fs.writeFileSync(file1, body, 'utf8');
+    res.send('ok');
+  });
+});
+
+app.listen(port, ()=>{
+    console.log(`服务启动，端口：${port}`);
+})
