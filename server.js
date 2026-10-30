@@ -308,6 +308,17 @@ app.post('/api/write1', (req, res) => {
   res.json({ ok: true, msg: "写入成功" });
 });
 
+// 临时添加这一段，跑一次拿到id之后删掉
+app.get("/create‑pantry",async (req,res)=>{
+  const resp = await fetch("https://getpantry.cloud/apiv1/pantry",{
+    method:"POST",
+    headers:{"Content‑Type":"application/json"},
+    body:JSON.stringify({email:"test@example.com"})
+  })
+  const data = await resp.json();
+  res.json(data);
+})
+
 app.listen(port, ()=>{
     console.log(`服务启动，端口：${port}`);
 })
