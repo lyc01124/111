@@ -1,12 +1,8 @@
 {
-  "name": "random-code-server",
-  "version": "1.0.0",
-  "dependencies": {
   "name": "111",
   "version": "1.0.0",
   "dependencies": {
     "express": "^4.18.2",
     "axios": "^1.7.7"
-    }
   }
 }
