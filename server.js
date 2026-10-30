@@ -151,3 +151,34 @@ app.get('/fmt/:ms', (req,res)=>{
 app.listen(port, ()=>{
     console.log(`服务启动，端口：${port}`);
 })
+
+// 在线编辑 time.txt
+app.get('/edit-time', (req, res) => {
+  const fs = require('fs');
+  const path = require('path');
+  const fileTime = path.join(__dirname, 'time.txt');
+  let content = '';
+  if (fs.existsSync(fileTime)) {
+    content = fs.readFileSync(fileTime, 'utf-8');
+  }
+  res.send(`
+  <!DOCTYPE html>
+  <html>
+  <body style="background:#111;color:#fff;padding:20px">
+    <h3>编辑 time.txt</h3>
+    <form method="POST" action="/save-time">
+      <textarea name="content" style="width:100%;height:400px;background:#222;color:#eee">${content}</textarea>
+      <br>
+      <button type="submit" style="margin-top:10px;padding:8px 16px">保存</button>
+    </form>
+  </body>
+  </html>
+  `)
+})
+app.post('/save-time', express.text({type: '*/*'}), (req, res) => {
+  const fs = require('fs');
+  const path = require('path');
+  const fileTime = path.join(__dirname, 'time.txt');
+  fs.writeFileSync(fileTime, req.body);
+  res.send('<h3>✅ 保存成功！<a href="/edit-time">返回编辑页</a></h3>');
+})
