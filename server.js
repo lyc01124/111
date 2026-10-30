@@ -308,29 +308,7 @@ app.post('/api/write1', (req, res) => {
   res.json({ ok: true, msg: "写入成功" });
 });
 
-// 临时接口，拿到pantryId之后务必删除！
-app.get("/create-pantry", async (req, res) => {
-  try {
-    console.log("开始请求 pantry");
-    const payload = { email: "test@example.com" };
-    console.log("payload:", payload);
-    const bodyStr = JSON.stringify(payload);
-    console.log("body字符串：", bodyStr);
 
-    const resp = await fetch("https://getpantry.cloud/apiv1/pantry", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: bodyStr
-    });
-    console.log("resp.ok:", resp.ok, "status:", resp.status);
-    const data = await resp.json();
-    console.log("返回数据：", data);
-    res.json(data);
-  } catch (err) {
-    console.error("捕获错误：", err);
-    res.status(500).json({ error: "请求pantry失败", msg: String(err) });
-  }
-});
 
 app.listen(port, ()=>{
     console.log(`服务启动，端口：${port}`);
