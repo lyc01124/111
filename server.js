@@ -45,18 +45,19 @@ function saveTimeMap(map) {
   fs.writeFileSync(TIME_PATH, JSON.stringify(map));
 }
 
-// 解析时长：S秒 F分 H小时 T天 Y年
+// 解析时长：
+// S:1小时  F:1分钟  H:1小时  T:1天  Y:1月（30天）
 function parsePrefix(prefix) {
   const m = prefix.match(/^(\d+)([SFHTY])$/i);
   if (!m) return null;
   const num = parseInt(m[1]);
   const unit = m[2].toUpperCase();
   const map = {
-    S: 1000,
-    F: 60 * 1000,
-    H: 60 * 60 * 1000,
-    T: 24 * 60 * 60 * 1000,
-    Y: 365 * 24 * 60 * 60 * 1000
+    S: 60 * 60 * 1000,                // S = 1小时
+    F: 60 * 1000,                     // F = 1分钟
+    H: 60 * 60 * 1000,                // H = 1小时
+    T: 24 * 60 * 60 * 1000,           // T = 1天
+    Y: 30 * 24 * 60 * 60 * 1000       // Y = 1个月（按30天）
   };
   return num * map[unit];
 }
@@ -66,7 +67,7 @@ app.post('/gen', (req, res) => {
   const { prefix } = req.body;
   if (!prefix) return res.json({ ok: false, msg: "请输入前缀" });
   const durMs = parsePrefix(prefix);
-  if (!durMs) return res.json({ ok: false, msg: "格式错误，示例：1F" });
+  if (!durMs) return res.json({ ok: false, msg: "格式错误，示例：1F（1分钟）、1S（1小时）、1H（1小时）、1T（1天）、1Y（1月）" });
 
   const code = crypto.randomBytes(8).toString('hex').slice(0, 10).toUpperCase();
   const all = readAll();
@@ -111,7 +112,7 @@ app.get('/fmt/:ms', (req, res) => {
   res.send(arr.join(' '));
 });
 
-// 删除卡密（这里已经修复双点问题）
+// 删除卡密
 app.post('/api/delete-code', (req, res) => {
   const { code } = req.body;
   if (!code) return res.json({ ok: false, msg: "缺少code" });
