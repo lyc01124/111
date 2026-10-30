@@ -1,20 +1,20 @@
 const express = require('express');
 const axios = require('axios');
-const fs = require('fs');
 const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 const PANTRY_ID = process.env.PANTRY_ID;
+console.log("读取到的 PANTRY_ID：", PANTRY_ID);
 if (!PANTRY_ID) {
-  console.error("错误：未配置 PANTRY_ID 环境变量");
+  console.error("❌ 错误：没有读取到 PANTRY_ID 环境变量！");
 }
 const API_BASE = `https://getpantry.cloud/apiv1/pantry/${PANTRY_ID}/basket`;
 const BASKET_DATA = "data1";
 const BASKET_TIME = "timeData";
 
-// 缓存：2分钟 = 120秒
+// 缓存：2分钟
 const CACHE_TTL = 120 * 1000;
 let cache = {
   data: { value: null, time: 0 },
@@ -34,16 +34,20 @@ app.use(express.static(path.join(__dirname, './')));
 
 async function pantryGet(basketName) {
   try {
+    console.log(`👉 发起读取请求: ${API_BASE}/${basketName}`);
     const r = await axios.get(`${API_BASE}/${basketName}`, { timeout: 12000 });
+    console.log(`✅ 读取成功 ${basketName}`, r.data);
     return r.data;
   } catch (e) {
-    console.error("读取失败", basketName, e.message);
+    console.error(`❌ 读取失败 ${basketName}`, e.message);
     return null;
   }
 }
 async function pantryPut(basketName, payload) {
   try {
+    console.log(`👉 发起保存请求: ${API_BASE}/${basketName}`, payload);
     await axios.post(`${API_BASE}/${basketName}`, payload, { timeout: 12000 });
+    console.log(`✅ 保存成功 ${basketName}`);
     if (basketName === BASKET_DATA) {
       cache.data.value = payload;
       cache.data.time = Date.now();
@@ -54,7 +58,7 @@ async function pantryPut(basketName, payload) {
     }
     return true;
   } catch (e) {
-    console.error("写入失败", basketName, e.message);
+    console.error(`❌ 保存失败 ${basketName}`, e.message);
     return false;
   }
 }
@@ -62,6 +66,7 @@ async function pantryPut(basketName, payload) {
 app.get('/api/getData', async (req, res) => {
   const now = Date.now();
   if (cache.data.value && now - cache.data.time < CACHE_TTL) {
+    console.log("✅ 使用缓存 getData");
     return res.json(cache.data.value);
   }
   const data = await pantryGet(BASKET_DATA);
@@ -75,6 +80,7 @@ app.get('/api/getData', async (req, res) => {
 app.get('/api/getTime', async (req, res) => {
   const now = Date.now();
   if (cache.time.value && now - cache.time.time < CACHE_TTL) {
+    console.log("✅ 使用缓存 getTime");
     return res.json(cache.time.value);
   }
   const data = await pantryGet(BASKET_TIME);
@@ -86,10 +92,12 @@ app.get('/api/getTime', async (req, res) => {
 });
 
 app.post('/api/saveData', async (req, res) => {
+  console.log("收到 saveData 请求 body：", req.body);
   const ok = await pantryPut(BASKET_DATA, req.body);
   res.json({ success: ok });
 });
 app.post('/api/saveTime', async (req, res) => {
+  console.log("收到 saveTime 请求 body：", req.body);
   const ok = await pantryPut(BASKET_TIME, req.body);
   res.json({ success: ok });
 });
@@ -99,5 +107,5 @@ app.get('/', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`服务启动，端口 ${PORT}`);
+  console.log(`🚀 服务启动，端口 ${PORT}`);
 });
