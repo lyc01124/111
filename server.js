@@ -4,7 +4,7 @@ const path = require('path');
 const app = express();
 const port = process.env.PORT || 3000;
 
-// ===== 跨域中间件（必须放在这里！app创建之后，所有路由之前）====
+// ===== CORS跨域（插件必备，放在所有路由前面） =====
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
   res.header("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
@@ -15,7 +15,7 @@ app.use((req, res, next) => {
 
 app.use(express.static(__dirname));
 app.use(express.json());
-app.use(express.text({type: '*/*'})); // 给edit-time的文本解析
+app.use(express.text({type: '*/*'}));
 
 const file1 = path.join(__dirname, '1.txt');
 const fileTime = path.join(__dirname, 'time.txt');
@@ -49,7 +49,7 @@ function readTimeFile() {
     const lines = txt.trim().split('\n').filter(Boolean);
     const map = new Map();
     lines.forEach(line => {
-        const [code, id] = line.split(';'); // 这里注意！原来你写反了 code;id
+        const [code, id] = line.split(';');
         map.set(code, id);
     });
     return map;
@@ -155,7 +155,7 @@ app.get('/fmt/:ms', (req,res)=>{
     res.send(formatMs(ms));
 })
 
-// ========== 在线编辑 time.txt ==========
+// ========== 网页编辑 time.txt ==========
 app.get('/edit-time', (req, res) => {
   let content = '';
   if (fs.existsSync(fileTime)) {
@@ -176,52 +176,36 @@ app.get('/edit-time', (req, res) => {
   `)
 })
 app.post('/save-time', (req, res) => {
-  fs.writeFileSync(fileTime, req.body);
+  fs.writeFileSync(fileTime, req.body, 'utf8');
   res.send('<h3>✅ 保存成功！<a href="/edit-time">返回编辑页</a></h3>');
 })
 
-// ========== 插件API：json版本 ==========
-// 读取 1.txt
-app.get('/api/read1', (req, res) => {
-  if (!fs.existsSync(file1)) {
-    return res.json({ ok: true, content: "" });
+// ========== 网页编辑 1.txt ==========
+app.get('/edit-1', (req, res) => {
+  let content = '';
+  if (fs.existsSync(file1)) {
+    content = fs.readFileSync(file1, 'utf-8');
   }
-  const txt = fs.readFileSync(file1, 'utf-8');
-  res.json({ ok: true, content: txt });
-});
-// 写入 1.txt（覆盖式写入）
-app.post('/api/write1', (req, res) => {
-  const { content } = req.body;
-  fs.writeFileSync(file1, content, 'utf-8');
-  res.json({ ok: true, msg: "写入成功" });
-});
-
-// ========== 插件API：raw纯文本版本（推荐插件用） ==========
-app.get('/raw/1.txt', (req, res) => {
-  res.setHeader("Content-Type", "text/plain;charset=utf-8");
-  if (!fs.existsSync(file1)) return res.send("");
-  res.send(fs.readFileSync(file1, 'utf-8'));
+  res.send(`
+  <!DOCTYPE html>
+  <html>
+  <body style="background:#111;color:#fff;padding:20px">
+    <h3>编辑 1.txt</h3>
+    <form method="POST" action="/save-1">
+      <textarea name="content" style="width:100%;height:400px;background:#222;color:#eee">${content}</textarea>
+      <br>
+      <button type="submit" style="margin-top:10px;padding:8px 16px">保存</button>
+    </form>
+  </body>
+  </html>
+  `)
 })
-app.get('/raw/time.txt', (req, res) => {
-  res.setHeader("Content-Type", "text/plain;charset=utf-8");
-  if (!fs.existsSync(fileTime)) return res.send("");
-  res.send(fs.readFileSync(fileTime, 'utf-8'));
+app.post('/save-1', (req, res) => {
+  fs.writeFileSync(file1, req.body, 'utf8');
+  res.send('<h3>✅ 1.txt保存成功！<a href="/edit-1">返回编辑页</a></h3>');
 })
-// raw写入1.txt
-app.post('/raw/1.txt', (req, res) => {
-  let body = '';
-  req.on('data', chunk => body += chunk);
-  req.on('end', () => {
-    fs.writeFileSync(file1, body, 'utf8');
-    res.send('ok');
-  });
-});
 
-/**
- * 接口：POST /api/activate-code
- * 请求体 { "code":"1Fxxxx随机码" }
- * 功能：收到随机码，激活该条记录，写入time.txt
- */
+// ==========【修复版】激活卡密接口 /api/activate-code ==========
 app.post('/api/activate-code', express.json(), (req, res) => {
   const { code } = req.body;
   if (!code) {
@@ -229,25 +213,26 @@ app.post('/api/activate-code', express.json(), (req, res) => {
   }
 
   let list1 = readFile1();
-  // 查找这条随机码记录
   const targetItem = list1.find(item => item.code === code);
   if (!targetItem) {
     return res.json({ ok: false, msg: "找不到该随机码记录" });
   }
 
-  // 如果已经激活，直接返回
   if (targetItem.active === "1") {
     return res.json({ ok: true, msg: "该码已经激活", id: targetItem.id });
   }
 
-  // 修改active为1，设置激活时间为当前时间戳
   targetItem.active = "1";
   targetItem.activateAt = Date.now();
   saveFile1(list1);
 
-  // 追加写入 time.txt：格式 code;id
   const appendLine = `${targetItem.code};${targetItem.id}\n`;
   fs.appendFileSync(fileTime, appendLine, "utf-8");
+
+  const checkMap = readTimeFile();
+  if(!checkMap.has(targetItem.code)){
+    return res.json({ok:false,msg:"警告：time.txt写入校验失败，磁盘未生效，请稍后重试"});
+  }
 
   return res.json({
     ok: true,
@@ -255,6 +240,72 @@ app.post('/api/activate-code', express.json(), (req, res) => {
     id: targetItem.id,
     code: targetItem.code
   });
+});
+
+// ========== 删除接口：同时删除1.txt与time.txt对应卡密 ==========
+app.post('/api/delete-code', express.json(), (req, res) => {
+  const { code } = req.body;
+  if (!code) {
+    return res.json({ ok: false, msg: "缺少code参数" });
+  }
+  let list1 = readFile1();
+  const existItem = list1.find(x => x.code === code);
+  if (!existItem) {
+    return res.json({ ok: false, msg: "该卡密在1.txt不存在" });
+  }
+  list1 = list1.filter(x => x.code !== code);
+  saveFile1(list1);
+
+  if (fs.existsSync(fileTime)) {
+    let timeText = fs.readFileSync(fileTime, 'utf-8');
+    const lines = timeText.split('\n').filter(Boolean);
+    const newLines = lines.filter(line => {
+      const [c] = line.split(';');
+      return c !== code;
+    });
+    fs.writeFileSync(fileTime, newLines.join('\n'), 'utf-8');
+  }
+  return res.json({
+    ok: true,
+    msg: "已同步删除1.txt与time.txt中的该卡密",
+    code: code
+  });
+});
+
+// ========== raw纯文本接口：time.txt ==========
+app.get('/raw/time.txt', (req, res) => {
+  res.setHeader("Content-Type", "text/plain;charset=utf-8");
+  if (!fs.existsSync(fileTime)) return res.send("");
+  res.send(fs.readFileSync(fileTime, 'utf-8'));
+})
+app.post('/raw/time.txt', (req, res) => {
+  fs.writeFileSync(fileTime, req.body, 'utf8');
+  res.send('ok');
+})
+
+// ========== raw纯文本接口：1.txt ==========
+app.get('/raw/1.txt', (req, res) => {
+  res.setHeader("Content-Type", "text/plain;charset=utf-8");
+  if (!fs.existsSync(file1)) return res.send("");
+  res.send(fs.readFileSync(file1, 'utf-8'));
+})
+app.post('/raw/1.txt', (req, res) => {
+  fs.writeFileSync(file1, req.body, 'utf8');
+  res.send('ok');
+});
+
+// ========== json版读写API ==========
+app.get('/api/read1', (req, res) => {
+  if (!fs.existsSync(file1)) {
+    return res.json({ ok: true, content: "" });
+  }
+  const txt = fs.readFileSync(file1, 'utf-8');
+  res.json({ ok: true, content: txt });
+});
+app.post('/api/write1', (req, res) => {
+  const { content } = req.body;
+  fs.writeFileSync(file1, content, 'utf-8');
+  res.json({ ok: true, msg: "写入成功" });
 });
 
 app.listen(port, ()=>{
