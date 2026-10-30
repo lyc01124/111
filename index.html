@@ -10,6 +10,7 @@ body{padding:20px;background:#111;color:#eee}
 input,button{padding:8px 12px;font-size:16px}
 button{cursor:pointer;background:#2563eb;color:#fff;border:none;border-radius:4px;margin-left:8px}
 button.del{background:#dc2626;}
+button.act{background:#16a34a;}
 #tip{margin:10px 0;color:#f88}
 table{border-collapse:collapse;width:100%;margin-top:10px}
 th,td{border:1px solid #444;padding:10px;text-align:center}
@@ -50,6 +51,7 @@ th{background:#222}
                 <th>是否激活</th>
                 <th>激活时间</th>
                 <th>剩余时间</th>
+                <th>操作</th>
             </tr>
         </thead>
         <tbody id="tableBody"></tbody>
@@ -98,6 +100,22 @@ function copyCode(){
     alert('已复制');
 }
 
+async function activateCode(code){
+    if(!confirm("确定激活该卡密？激活后计时开始")) return;
+    const resp = await fetch("/activate",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({code})
+    })
+    const ret = await resp.json();
+    if(ret.ok){
+        alert("激活成功");
+        refreshList();
+    }else{
+        alert("失败：" + ret.msg);
+    }
+}
+
 async function refreshList(){
     try{
         const res = await fetch('/list');
@@ -106,13 +124,15 @@ async function refreshList(){
         const tbody = document.getElementById('tableBody');
         tbody.innerHTML = '';
         for(const row of tableData){
-            const remainRes = await fetch(`/fmt/${row.expireAt - Date.now()}`);
+            const remainMs = row.expireAt - Date.now();
+            const remainRes = await fetch(`/fmt/${remainMs}`);
             const remainText = await remainRes.text();
             const tr = document.createElement('tr');
             tr.dataset.id = row.id;
             tr.dataset.code = row.code;
             const activeText = row.active === '1' ? '是' : '否';
             const activateTime = row.activateAt ? new Date(row.activateAt).toLocaleString() : '-';
+            const actBtn = row.active === '0' ? `<button class="act" onclick="activateCode('${row.code}')">激活</button>` : `<span style="color:#888">已激活</span>`;
             tr.innerHTML = `
                 <td class="check-col"><input class="item-check" type="checkbox" data-id="${row.id}" data-code="${row.code}"></td>
                 <td>${row.id}</td>
@@ -120,6 +140,7 @@ async function refreshList(){
                 <td>${activeText}</td>
                 <td>${activateTime}</td>
                 <td>${remainText}</td>
+                <td>${actBtn}</td>
             `;
             tbody.appendChild(tr);
         }
@@ -180,7 +201,6 @@ async function batchDelete(){
     refreshList();
 }
 
-// 自动刷新60秒一次
 setInterval(refreshList, 60000);
 refreshList();
 </script>
