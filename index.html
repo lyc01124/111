@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>时效随机码管理</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:system-ui}
+body{padding:20px;background:#111;color:#eee}
+.box{margin-bottom:20px;padding:16px;border:1px solid #444;border-radius:8px}
+input,button{padding:8px 12px;font-size:16px}
+button{cursor:pointer;background:#2563eb;color:#fff;border:none;border-radius:4px;margin-left:8px}
+#tip{margin:10px 0;color:#f88}
+table{border-collapse:collapse;width:100%;margin-top:10px}
+th,td{border:1px solid #444;padding:10px;text-align:center}
+th{background:#222}
+</style>
+</head>
+<body>
+<div class="box">
+    <h3>生成随机码</h3>
+    <p>时间前缀（格式：1F / 3S / 2H / 1T / 1Y，不能输入10H这类）</p>
+    <input type="text" id="prefix" placeholder="例如：1F">
+    <button onclick="genCode()">生成</button>
+    <button onclick="refreshList()">刷新列表</button>
+    <div id="tip"></div>
+    <div id="newCodeBox" style="margin-top:10px;display:none">
+        生成码：<span id="newCode"></span>
+        <button onclick="copyCode()">复制</button>
+    </div>
+</div>
+<div class="box">
+    <h3>随机码列表</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>编号</th>
+                <th>随机码</th>
+                <th>是否激活</th>
+                <th>激活时间</th>
+                <th>预留</th>
+                <th>剩余时间</th>
+            </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+    </table>
+</div>
+
+<script>
+let lastCode = '';
+async function genCode(){
+    const pre = document.getElementById('prefix').value.trim();
+    const res = await fetch('/gen',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({prefix:pre})
+    });
+    const json = await res.json();
+    const tip = document.getElementById('tip');
+    if(!json.ok){
+        tip.innerText = json.msg;
+        return;
+    }
+    tip.innerText = '生成成功';
+    lastCode = json.code;
+    document.getElementById('newCode').innerText = lastCode;
+    document.getElementById('newCodeBox').style.display = 'block';
+    refreshList();
+}
+function copyCode(){
+    navigator.clipboard.writeText(lastCode);
+    alert('已复制');
+}
+async function refreshList(){
+    const res = await fetch('/list');
+    const json = await res.json();
+    const tbody = document.getElementById('tableBody');
+    tbody.innerHTML = '';
+    json.data.forEach(async row=>{
+        const tr = document.createElement('tr');
+        const activeText = row.active === '1' ? '是' : '否';
+        const activateTime = row.activateAt ? new Date(row.activateAt).toLocaleString() : '-';
+        const remainRes = await fetch(`/fmt/${row.remainMs}`);
+        const remainText = await remainRes.text();
+        tr.innerHTML = `
+            <td>${row.id}</td>
+            <td>${row.code}</td>
+            <td>${activeText}</td>
+            <td>${activateTime}</td>
+            <td>-</td>
+            <td>${remainText}</td>
+        `;
+        tbody.appendChild(tr);
+    })
+}
+setInterval(refreshList,1000);
+refreshList();
+</script>
+</body>
+</html>
