@@ -1,8 +1,6 @@
 services:
   - type: web
-    name: random-code
-    runtime: node
-    region: singapore
+    name: kami-manager
+    env: node
     buildCommand: npm install
     startCommand: node server.js
-    autoDeploy: true
