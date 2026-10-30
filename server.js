@@ -6,7 +6,6 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Pantry 配置
 const PANTRY_ID = process.env.PANTRY_ID;
 if (!PANTRY_ID) {
   console.error("错误：未配置 PANTRY_ID 环境变量");
@@ -15,7 +14,13 @@ const API_BASE = `https://getpantry.cloud/apiv1/pantry/${PANTRY_ID}/basket`;
 const BASKET_DATA = "data1";
 const BASKET_TIME = "timeData";
 
-// 跨域
+// 缓存：2分钟 = 120秒
+const CACHE_TTL = 120 * 1000;
+let cache = {
+  data: { value: null, time: 0 },
+  time: { value: null, time: 0 }
+};
+
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
   res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
@@ -27,7 +32,6 @@ app.use((req, res, next) => {
 app.use(express.json());
 app.use(express.static(path.join(__dirname, './')));
 
-// Pantry 读取
 async function pantryGet(basketName) {
   try {
     const r = await axios.get(`${API_BASE}/${basketName}`, { timeout: 12000 });
@@ -37,10 +41,17 @@ async function pantryGet(basketName) {
     return null;
   }
 }
-// Pantry 写入
 async function pantryPut(basketName, payload) {
   try {
     await axios.post(`${API_BASE}/${basketName}`, payload, { timeout: 12000 });
+    if (basketName === BASKET_DATA) {
+      cache.data.value = payload;
+      cache.data.time = Date.now();
+    }
+    if (basketName === BASKET_TIME) {
+      cache.time.value = payload;
+      cache.time.time = Date.now();
+    }
     return true;
   } catch (e) {
     console.error("写入失败", basketName, e.message);
@@ -48,17 +59,32 @@ async function pantryPut(basketName, payload) {
   }
 }
 
-// 获取数据
 app.get('/api/getData', async (req, res) => {
+  const now = Date.now();
+  if (cache.data.value && now - cache.data.time < CACHE_TTL) {
+    return res.json(cache.data.value);
+  }
   const data = await pantryGet(BASKET_DATA);
+  if (data) {
+    cache.data.value = data;
+    cache.data.time = now;
+  }
   res.json(data || []);
 });
+
 app.get('/api/getTime', async (req, res) => {
+  const now = Date.now();
+  if (cache.time.value && now - cache.time.time < CACHE_TTL) {
+    return res.json(cache.time.value);
+  }
   const data = await pantryGet(BASKET_TIME);
+  if (data) {
+    cache.time.value = data;
+    cache.time.time = now;
+  }
   res.json(data || {});
 });
 
-// 保存数据
 app.post('/api/saveData', async (req, res) => {
   const ok = await pantryPut(BASKET_DATA, req.body);
   res.json({ success: ok });
